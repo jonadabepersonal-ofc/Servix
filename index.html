@@ -1492,4 +1492,273 @@ document.getElementById("bd")?.addEventListener("click",()=>ib.classList.remove(
 window.addEventListener("appinstalled",()=>ib.classList.remove("show"));
 </script>
 </body>
-</html>
+</html><!-- PATCH: Admin Panel + Auth Fix injected -->
+<script type="text/babel" data-presets="react">
+// Admin Panel standalone mount — password jonadabe2024
+(function(){
+  const ADMIN_PASS = "jonadabe2024";
+  const SUPA_URL = "https://yhsfjxbvcprkbpovzxta.supabase.co";
+  const SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inloc2ZqeGJ2Y3Bya2Jwb3Z6eHRhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMwNzQyNjYsImV4cCI6MjA4ODY1MDI2Nn0.0VJPv50hOvpKqOnE5aNWShliVJMp7P32Br-bwjD58Ps";
+
+  // Check URL for admin route
+  const isAdmin = window.location.hash === '#admin' || 
+                  new URLSearchParams(window.location.search).get('admin') === '1';
+  if(!isAdmin) return;
+
+  const SB2 = window.supabase.createClient(SUPA_URL, SUPA_KEY);
+  
+  const C = {dark:"#0D1117",carbon:"#1A1F2E",surface:"#242938",border:"#2E3447",
+    green:"#00D46A",orange:"#FF6B2B",blue:"#4A9EFF",yellow:"#FFD046",
+    red:"#FF4757",muted:"#8892A4",text:"#E8EDF5",sub:"#4A5568"};
+
+  function AdminApp() {
+    const [auth, setAuth] = React.useState(false);
+    const [pass, setPass] = React.useState('');
+    const [tab, setTab] = React.useState('dashboard');
+    const [data, setData] = React.useState({services:[],providers:[],stats:{}});
+    const [loading, setLoading] = React.useState(false);
+
+    const load = async () => {
+      setLoading(true);
+      try {
+        const [svRes, prRes] = await Promise.all([
+          SB2.from('services').select('*').order('created_at',{ascending:false}).limit(100),
+          SB2.from('profiles').select('*').eq('role','provider'),
+        ]);
+        const svcs = svRes.data || [];
+        const provs = prRes.data || [];
+        const completed = svcs.filter(s=>s.status==='COMPLETED');
+        const gmv = completed.reduce((a,s)=>a+(s.final_price||0),0);
+        setData({
+          services: svcs, providers: provs,
+          stats:{
+            total_services: svcs.length,
+            active: svcs.filter(s=>['PENDING','NEGOTIATING','CONFIRMED','IN_PROGRESS'].includes(s.status)).length,
+            completed: completed.length,
+            cancelled: svcs.filter(s=>s.status==='CANCELLED').length,
+            gmv: gmv,
+            revenue: gmv * 0.0499,
+            providers: provs.length,
+          }
+        });
+      } catch(e) { console.warn(e); }
+      setLoading(false);
+    };
+
+    React.useEffect(()=>{ if(auth) load(); },[auth]);
+
+    const updateStatus = async (id, status) => {
+      await SB2.from('services').update({status}).eq('id',id);
+      setData(d=>({...d, services: d.services.map(s=>s.id===id?{...s,status}:s)}));
+    };
+
+    const deleteService = async (id) => {
+      if(!confirm('Excluir serviço?')) return;
+      await SB2.from('services').delete().eq('id',id);
+      setData(d=>({...d, services: d.services.filter(s=>s.id!==id)}));
+    };
+
+    const inp2 = {background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,
+      padding:'10px 14px',color:C.text,fontSize:14,fontFamily:'inherit',outline:'none',width:'100%',boxSizing:'border-box'};
+
+    if(!auth) return (
+      <div style={{minHeight:'100vh',background:C.dark,display:'flex',alignItems:'center',justifyContent:'center',padding:24}}>
+        <div style={{background:C.carbon,borderRadius:20,padding:32,width:'100%',maxWidth:360,border:`1px solid ${C.border}`}}>
+          <div style={{textAlign:'center',marginBottom:24}}>
+            <div style={{fontSize:40,marginBottom:8}}>🔐</div>
+            <h2 style={{color:C.text,fontFamily:'Space Grotesk,sans-serif',fontSize:22,fontWeight:800}}>Painel Admin</h2>
+            <p style={{color:C.muted,fontSize:13,marginTop:4}}>ServiX — Acesso restrito</p>
+          </div>
+          <input type="password" value={pass} onChange={e=>setPass(e.target.value)}
+            placeholder="Senha do admin..." style={inp2}
+            onKeyPress={e=>e.key==='Enter'&&(pass===ADMIN_PASS?setAuth(true):alert('Senha incorreta'))}/>
+          <button onClick={()=>pass===ADMIN_PASS?setAuth(true):alert('Senha incorreta')}
+            style={{width:'100%',marginTop:12,padding:'12px',background:C.green,color:C.dark,
+              border:'none',borderRadius:12,fontWeight:700,fontSize:14,cursor:'pointer',fontFamily:'inherit'}}>
+            Acessar painel →
+          </button>
+          <p style={{color:C.muted,fontSize:11,textAlign:'center',marginTop:14}}>
+            <a href="/" style={{color:C.muted}}>← Voltar ao app</a>
+          </p>
+        </div>
+      </div>
+    );
+
+    const fmtR = n => n!=null ? `R$ ${Number(n).toFixed(2).replace('.',',')}` : '—';
+    const ST_COLORS = {PENDING:C.yellow,NEGOTIATING:C.blue,CONFIRMED:C.green,IN_PROGRESS:C.orange,COMPLETED:C.green,CANCELLED:C.red};
+
+    return (
+      <div style={{minHeight:'100vh',background:C.dark,fontFamily:'DM Sans,sans-serif',color:C.text}}>
+        {/* Header */}
+        <div style={{background:C.carbon,borderBottom:`1px solid ${C.border}`,padding:'14px 20px',
+          display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+          <div style={{display:'flex',alignItems:'center',gap:10}}>
+            <span style={{fontSize:22}}>🔧</span>
+            <div>
+              <h1 style={{fontSize:18,fontWeight:800,fontFamily:'Space Grotesk,sans-serif',margin:0}}>ServiX Admin</h1>
+              <p style={{color:C.muted,fontSize:11,margin:0}}>Painel de controle · Seropédica/RJ</p>
+            </div>
+          </div>
+          <div style={{display:'flex',gap:8,alignItems:'center'}}>
+            <button onClick={load} style={{background:C.surface,border:`1px solid ${C.border}`,
+              borderRadius:8,padding:'6px 12px',color:C.muted,cursor:'pointer',fontSize:12,fontFamily:'inherit'}}>
+              {loading ? '⏳' : '🔄 Atualizar'}
+            </button>
+            <a href="/" style={{background:'rgba(255,71,87,.1)',border:'1px solid rgba(255,71,87,.3)',
+              borderRadius:8,padding:'6px 12px',color:C.red,fontSize:12,textDecoration:'none'}}>Sair</a>
+          </div>
+        </div>
+
+        {/* Tabs */}
+        <div style={{display:'flex',gap:4,padding:'10px 16px',background:C.carbon,
+          borderBottom:`1px solid ${C.border}`,overflowX:'auto'}}>
+          {[['dashboard','📊 Dashboard'],['services','📋 Serviços'],['providers','🔧 Prestadores']].map(([k,l])=>(
+            <button key={k} onClick={()=>setTab(k)} style={{padding:'7px 16px',borderRadius:8,
+              border:'none',cursor:'pointer',fontWeight:700,fontSize:12,fontFamily:'inherit',
+              background:tab===k?C.green:'transparent',color:tab===k?C.dark:C.muted,whiteSpace:'nowrap'}}>
+              {l}
+            </button>
+          ))}
+        </div>
+
+        <div style={{padding:'16px 16px 40px',maxWidth:800,margin:'0 auto'}}>
+
+          {/* DASHBOARD */}
+          {tab==='dashboard' && (
+            <div>
+              <h2 style={{fontSize:18,fontWeight:800,fontFamily:'Space Grotesk,sans-serif',marginBottom:16}}>Visão geral</h2>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:20}}>
+                {[
+                  {v:data.stats.total_services||0,l:'Total de serviços',c:C.blue},
+                  {v:data.stats.active||0,l:'Ativos agora',c:C.orange},
+                  {v:data.stats.completed||0,l:'Concluídos',c:C.green},
+                  {v:data.stats.providers||0,l:'Prestadores',c:C.purple||'#8B5CF6'},
+                  {v:fmtR(data.stats.gmv||0),l:'Volume total (GMV)',c:C.yellow},
+                  {v:fmtR(data.stats.revenue||0),l:'Receita ServiX (4,99%)',c:C.green},
+                ].map(s=>(
+                  <div key={s.l} style={{background:C.carbon,border:`1px solid ${C.border}`,
+                    borderRadius:14,padding:16,textAlign:'center'}}>
+                    <div style={{fontWeight:900,fontSize:26,color:s.c,fontFamily:'Space Grotesk,sans-serif'}}>{s.v}</div>
+                    <div style={{color:C.muted,fontSize:11,marginTop:4,textTransform:'uppercase',letterSpacing:'.06em'}}>{s.l}</div>
+                  </div>
+                ))}
+              </div>
+              <div style={{background:C.carbon,borderRadius:14,padding:16,border:`1px solid ${C.border}`}}>
+                <h3 style={{fontWeight:700,color:C.text,marginBottom:12}}>Status dos serviços</h3>
+                {['PENDING','NEGOTIATING','CONFIRMED','IN_PROGRESS','COMPLETED','CANCELLED'].map(st=>{
+                  const count = (data.services||[]).filter(s=>s.status===st).length;
+                  const pct = data.stats.total_services ? Math.round(count/data.stats.total_services*100) : 0;
+                  const labels = {PENDING:'Aguardando',NEGOTIATING:'Propostas',CONFIRMED:'Confirmado',IN_PROGRESS:'Andamento',COMPLETED:'Concluído',CANCELLED:'Cancelado'};
+                  return (
+                    <div key={st} style={{marginBottom:10}}>
+                      <div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}>
+                        <span style={{color:C.text,fontSize:13}}>{labels[st]}</span>
+                        <span style={{color:ST_COLORS[st],fontSize:12,fontWeight:700}}>{count} ({pct}%)</span>
+                      </div>
+                      <div style={{height:4,background:C.border,borderRadius:4}}>
+                        <div style={{height:'100%',background:ST_COLORS[st],borderRadius:4,width:`${pct}%`}}/>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* SERVICES */}
+          {tab==='services' && (
+            <div>
+              <h2 style={{fontSize:18,fontWeight:800,fontFamily:'Space Grotesk,sans-serif',marginBottom:16}}>
+                Todos os serviços ({(data.services||[]).length})
+              </h2>
+              {(data.services||[]).map(sv=>(
+                <div key={sv.id} style={{background:C.carbon,border:`1px solid ${C.border}`,
+                  borderRadius:12,padding:14,marginBottom:10}}>
+                  <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:10,marginBottom:8}}>
+                    <div style={{flex:1}}>
+                      <p style={{fontWeight:700,color:C.text,fontSize:14,marginBottom:2}}>{sv.title}</p>
+                      <p style={{color:C.muted,fontSize:12}}>📍 {sv.address}</p>
+                      <p style={{color:C.muted,fontSize:11,marginTop:2}}>Cliente: {sv.client_name||sv.client_id?.slice(0,8)} · {new Date(sv.created_at).toLocaleDateString('pt-BR')}</p>
+                    </div>
+                    <div style={{textAlign:'right',flexShrink:0}}>
+                      <div style={{display:'inline-flex',alignItems:'center',gap:5,padding:'3px 9px',
+                        borderRadius:8,fontSize:11,fontWeight:700,color:ST_COLORS[sv.status],
+                        background:`${ST_COLORS[sv.status]}15`,border:`1px solid ${ST_COLORS[sv.status]}40`,marginBottom:6}}>
+                        {sv.status}
+                      </div>
+                      {sv.final_price && <p style={{color:C.green,fontWeight:700,fontSize:13}}>{fmtR(sv.final_price)}</p>}
+                    </div>
+                  </div>
+                  <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                    {['CONFIRMED','IN_PROGRESS','COMPLETED','CANCELLED'].map(st=>(
+                      <button key={st} onClick={()=>updateStatus(sv.id,st)}
+                        disabled={sv.status===st}
+                        style={{padding:'5px 10px',borderRadius:8,border:`1px solid ${ST_COLORS[st]}40`,
+                          background:sv.status===st?`${ST_COLORS[st]}20`:'transparent',
+                          color:sv.status===st?ST_COLORS[st]:C.muted,fontSize:10,fontWeight:600,
+                          cursor:sv.status===st?'default':'pointer',fontFamily:'inherit'}}>
+                        {st}
+                      </button>
+                    ))}
+                    <button onClick={()=>deleteService(sv.id)}
+                      style={{padding:'5px 10px',borderRadius:8,border:'1px solid rgba(255,71,87,.3)',
+                        background:'rgba(255,71,87,.06)',color:C.red,fontSize:10,fontWeight:600,
+                        cursor:'pointer',fontFamily:'inherit',marginLeft:'auto'}}>
+                      🗑️ Excluir
+                    </button>
+                  </div>
+                </div>
+              ))}
+              {!(data.services||[]).length && <p style={{color:C.muted,textAlign:'center',padding:'40px 0'}}>Nenhum serviço</p>}
+            </div>
+          )}
+
+          {/* PROVIDERS */}
+          {tab==='providers' && (
+            <div>
+              <h2 style={{fontSize:18,fontWeight:800,fontFamily:'Space Grotesk,sans-serif',marginBottom:16}}>
+                Prestadores ({(data.providers||[]).length})
+              </h2>
+              {(data.providers||[]).map(p=>(
+                <div key={p.id} style={{background:C.carbon,border:`1px solid ${C.border}`,
+                  borderRadius:12,padding:14,marginBottom:10,display:'flex',gap:12,alignItems:'center'}}>
+                  <div style={{width:46,height:46,background:C.surface,borderRadius:'50%',
+                    display:'flex',alignItems:'center',justifyContent:'center',fontSize:22,flexShrink:0}}>
+                    {p.avatar||'👷'}
+                  </div>
+                  <div style={{flex:1}}>
+                    <p style={{fontWeight:700,color:C.text,fontSize:14}}>{p.name}</p>
+                    <p style={{color:C.muted,fontSize:12}}>{p.email}</p>
+                    <p style={{color:C.muted,fontSize:11,marginTop:2}}>
+                      Categorias: {(p.categories||[]).join(', ')||'—'} · 
+                      Avaliação: {p.rating||'—'} ⭐
+                    </p>
+                  </div>
+                  <div style={{textAlign:'right',flexShrink:0}}>
+                    <div style={{display:'inline-flex',alignItems:'center',gap:5,padding:'3px 9px',
+                      borderRadius:8,fontSize:11,fontWeight:700,
+                      color:p.online?C.green:C.muted,
+                      background:p.online?'rgba(0,212,106,.1)':'rgba(136,146,164,.1)',
+                      border:`1px solid ${p.online?'rgba(0,212,106,.3)':'rgba(136,146,164,.3)'}`}}>
+                      {p.online?'✓ Ativo':'Inativo'}
+                    </div>
+                    <p style={{color:C.sub,fontSize:10,marginTop:4}}>{p.reviews||0} avaliações</p>
+                  </div>
+                </div>
+              ))}
+              {!(data.providers||[]).length && <p style={{color:C.muted,textAlign:'center',padding:'40px 0'}}>Nenhum prestador</p>}
+            </div>
+          )}
+
+        </div>
+      </div>
+    );
+  }
+
+  // Replace root with admin panel
+  const adminRoot = document.getElementById('root');
+  if(adminRoot) {
+    ReactDOM.createRoot(adminRoot).render(React.createElement(AdminApp));
+  }
+})();
+</script>
