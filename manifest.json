@@ -2,7 +2,8 @@
   "name": "ServiX — Marketplace de Serviços",
   "short_name": "ServiX",
   "description": "Serviços na palma da mão. Pedreiro, elétrica, pintura e mais em Seropédica/RJ.",
-  "start_url": "/",
+  "start_url": "./",
+  "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#0D1117",
@@ -21,13 +22,13 @@
     {
       "name": "Solicitar Serviço",
       "short_name": "Solicitar",
-      "url": "/?action=new",
+      "url": "./?action=new",
       "description": "Criar nova solicitação de serviço"
     },
     {
       "name": "Ver Radar",
       "short_name": "Radar",
-      "url": "/?action=radar",
+      "url": "./?action=radar",
       "description": "Ver serviços próximos (prestadores)"
     }
   ]
