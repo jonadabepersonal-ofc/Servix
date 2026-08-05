@@ -1,35 +1,37 @@
-const CACHE = 'servix-v1';
-const ASSETS = ['/', '/index.html'];
+// ServiX Service Worker — v2 (network-first, cache-busting)
+const CACHE = 'servix-v2';
 
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)));
   self.skipWaiting();
 });
 
 self.addEventListener('activate', e => {
-  e.waitUntil(caches.keys().then(ks =>
-    Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k)))
-  ));
-  self.clients.claim();
+  e.waitUntil(
+    caches.keys().then(keys =>
+      Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
+    ).then(() => self.clients.claim())
+  );
 });
 
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
-  // Não cacheia APIs externas
-  if (e.request.url.includes('supabase') ||
-      e.request.url.includes('tomtom') ||
-      e.request.url.includes('googleapis')) return;
+  const url = e.request.url;
 
+  // Never cache external APIs — always go live
+  if (url.includes('supabase') || url.includes('tomtom') ||
+      url.includes('googleapis') || url.includes('jsdelivr') ||
+      url.includes('unpkg')) return;
+
+  // Network-first for our own files: always try fresh, fall back to cache only if offline
   e.respondWith(
-    caches.match(e.request).then(cached => {
-      if (cached) return cached;
-      return fetch(e.request).then(res => {
+    fetch(e.request)
+      .then(res => {
         if (res && res.status === 200) {
           const clone = res.clone();
           caches.open(CACHE).then(c => c.put(e.request, clone));
         }
         return res;
-      }).catch(() => caches.match('/index.html'));
-    })
+      })
+      .catch(() => caches.match(e.request))
   );
 });
