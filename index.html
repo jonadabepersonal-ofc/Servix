@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.json"/>
 <title>ServiX</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@700;800&display=swap" rel="stylesheet"/>
-<link rel="stylesheet" href="https://api.tomtom.com/maps-sdk-for-web/cdn/6.x/6.25.0/maps/maps.css"/>
+
 <style>
 :root{
   --dark:#0D1117;--carbon:#1A1F2E;--surface:#242938;--border:#2E3447;
@@ -87,7 +87,10 @@ select.inp{appearance:auto;cursor:pointer}
 .radar-sweep{transform-origin:100px 100px;animation:radarSweep 4s linear infinite}
 
 /* MAP */
-.tt-map{width:100%;height:170px;border-radius:14px;overflow:hidden;border:1px solid var(--border);background:var(--surface);margin-bottom:12px}
+.tt-map{width:100%;height:170px;border-radius:14px;overflow:hidden;border:1px solid var(--border);background:var(--surface);margin-bottom:12px;position:relative}
+.tt-map img{width:100%;height:100%;object-fit:cover;display:block}
+.tt-map .pin{position:absolute;top:50%;left:50%;transform:translate(-50%,-100%);font-size:30px;filter:drop-shadow(0 3px 6px rgba(0,0,0,.5));pointer-events:none}
+.tt-map .attr{position:absolute;bottom:4px;right:6px;background:rgba(0,0,0,.5);color:#ccc;font-size:9px;padding:2px 6px;border-radius:4px}
 .tt-fullscreen-button{display:none!important}
 
 /* CTA */
@@ -142,7 +145,7 @@ select.inp{appearance:auto;cursor:pointer}
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-<script src="https://api.tomtom.com/maps-sdk-for-web/cdn/6.x/6.25.0/maps/maps-web.min.js"></script>
+
 <script>
 // ══════════════════════════════════════════════════════
 // CONFIG
@@ -266,18 +269,26 @@ function setupRealtime(){
 }
 
 // ══════════════════════════════════════════════════════
-// TOMTOM MAP HELPER
+// TOMTOM STATIC MAP HELPER (imagem, sem SDK descontinuado)
 // ══════════════════════════════════════════════════════
+function mapImgUrl(lat,lng,w=600,h=340){
+  const W=Math.min(Math.round(w),1024),H=Math.min(Math.round(h),1024);
+  return `https://api.tomtom.com/map/1/staticimage?key=${TT_KEY}&center=${lng},${lat}&zoom=15&width=${W}&height=${H}&layer=basic&style=night&format=jpg`;
+}
+function mapHtml(lat,lng,height=170,imgId=''){
+  const id=imgId?` id="${imgId}"`:'';
+  return `<div class="tt-map" style="height:${height}px">
+    <img${id} src="${mapImgUrl(lat,lng,860,height*2)}" alt="Mapa da localização" loading="lazy"
+      onerror="this.parentElement.innerHTML='<div style=&quot;height:100%;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:13px;flex-direction:column;gap:6px&quot;><span style=&quot;font-size:28px&quot;>📍</span>${esc(CIDADE)}</div>'"/>
+    <span class="pin">📍</span>
+    <span class="attr">© TomTom</span>
+  </div>`;
+}
 function initMap(containerId,lat=-22.7406,lng=-43.7075,height=170){
+  // Compat shim: alvos antigos que ainda chamam initMap(id,...) recebem a imagem estática
   const el=document.getElementById(containerId);
-  if(!el||!window.tt)return null;
-  el.style.height=height+'px';
-  try{
-    const m=window.tt.map({key:TT_KEY,container:el,center:[lng,lat],zoom:14,style:'tomtom://vector/1/basic-night'});
-    new window.tt.Marker({color:'#00D46A'}).setLngLat([lng,lat]).addTo(m);
-    MAP_INSTANCE=m;
-    return m;
-  }catch(e){el.innerHTML='<div style="height:100%;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:13px;flex-direction:column;gap:6px"><span style="font-size:28px">📍</span>'+CIDADE+'</div>';return null;}
+  if(!el)return;
+  el.outerHTML=mapHtml(lat,lng,height,containerId+'-img');
 }
 
 // ══════════════════════════════════════════════════════
@@ -643,9 +654,8 @@ function renderReqStep(){
       <button onclick="searchAddr()" class="btn secondary sm" style="border-radius:0 12px 12px 0;border-left:none;padding:0 14px" id="addr-search-btn">🔍</button>
     </div>
     <button onclick="getGeo()" class="btn secondary full sm" id="geo-btn" style="margin-bottom:14px">📍 Usar minha localização</button>
-    <div class="tt-map" id="req-map"></div>
+    ${mapHtml(REQ.lat,REQ.lng,170,'req-map-img')}
     <div class="field" style="margin-top:14px"><label>Data/hora preferida (opcional)</label><input type="datetime-local" class="inp" value="${esc(REQ.sched)}" oninput="REQ.sched=this.value"/></div>`;
-    setTimeout(()=>initMap('req-map',REQ.lat,REQ.lng),100);
     $('req-next').disabled=!REQ.addr;
   }else if(step===3){
     const bRange=REQ.bmax?`${fmtR(parseFloat(REQ.bmin)||0)} — ${fmtR(parseFloat(REQ.bmax)||0)}`:'';
@@ -684,13 +694,17 @@ async function getGeo(){
     REQ.lat=pos.coords.latitude;REQ.lng=pos.coords.longitude;
     try{const r=await fetch(`https://api.tomtom.com/search/2/reverseGeocode/${pos.coords.latitude},${pos.coords.longitude}.json?key=${TT_KEY}`);const d=await r.json();const a=d?.addresses?.[0]?.address?.freeformAddress;if(a){REQ.addr=a;const inp=$('r-addr');if(inp)inp.value=a;}}catch{}
     if(btn)btn.textContent='📍 Usar minha localização';
-    if(MAP_INSTANCE){try{MAP_INSTANCE.setCenter([REQ.lng,REQ.lat]);}catch{}}else initMap('req-map',REQ.lat,REQ.lng);
+    refreshReqMap();
   },()=>{if(btn)btn.textContent='📍 Usar minha localização';});
+}
+function refreshReqMap(){
+  const img=$('req-map-img');
+  if(img)img.src=mapImgUrl(REQ.lat,REQ.lng,860,340);
 }
 async function searchAddr(){
   const v=$('r-addr')?.value;if(!v)return;
   const btn=$('addr-search-btn');if(btn)btn.innerHTML='<div class="spin"></div>';
-  try{const r=await fetch(`https://api.tomtom.com/search/2/geocode/${encodeURIComponent(v+', Seropédica, RJ')}.json?key=${TT_KEY}`);const d=await r.json();if(d.results?.[0]){const p=d.results[0].position;REQ.lat=p.lat;REQ.lng=p.lon;REQ.addr=d.results[0].address.freeformAddress;const inp=$('r-addr');if(inp)inp.value=REQ.addr;if(MAP_INSTANCE){try{MAP_INSTANCE.setCenter([REQ.lng,REQ.lat]);}catch{}}else initMap('req-map',REQ.lat,REQ.lng);}}catch{}
+  try{const r=await fetch(`https://api.tomtom.com/search/2/geocode/${encodeURIComponent(v+', Seropédica, RJ')}.json?key=${TT_KEY}`);const d=await r.json();if(d.results?.[0]){const p=d.results[0].position;REQ.lat=p.lat;REQ.lng=p.lon;REQ.addr=d.results[0].address.freeformAddress;const inp=$('r-addr');if(inp)inp.value=REQ.addr;refreshReqMap();}}catch{}
   if(btn)btn.textContent='🔍';
 }
 
@@ -717,7 +731,7 @@ function serviceHTML(){
       ${svc.final_price?`<p style="color:var(--green);font-size:14px;font-weight:700">✅ Acordado: ${fmtR(svc.final_price)}</p>`:''}
       ${svc.urgency==='alta'?'<div style="margin-top:8px"><span class="chip" style="color:var(--orange);background:rgba(255,107,43,.1);border-color:rgba(255,107,43,.3)">🔥 Urgente</span></div>':''}
     </div>
-    <div class="tt-map" id="svc-map"></div>
+    ${mapHtml(svc.lat||(-22.7406),svc.lng||(-43.7075),150)}
     ${accepted?`<div class="card"><p style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Prestador selecionado</p><div style="display:flex;gap:12px;align-items:center"><div style="width:50px;height:50px;background:var(--surface);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:24px">${esc(accepted.avatar)}</div><div style="flex:1"><p style="font-weight:700;font-size:14px">${esc(accepted.provider_name)}</p>${starsHtml(accepted.rating||4.8)}<p style="color:var(--muted);font-size:11px;margin-top:2px">${accepted.reviews||0} avaliações</p></div><div style="text-align:right"><p style="font-weight:800;color:var(--green);font-size:24px">${fmtR(accepted.price)}</p>${accepted.hours?`<p style="color:var(--muted);font-size:11px">${accepted.hours}h</p>`:''}</div></div>${accepted.description?`<div style="margin-top:10px;background:var(--surface);border-radius:10px;padding:10px 12px"><p style="color:var(--muted);font-size:13px;line-height:1.5;font-style:italic">"${esc(accepted.description)}"</p>${accepted.warranty?`<p style="color:var(--green);font-size:12px;margin-top:4px">🛡️ ${esc(accepted.warranty)}</p>`:''}</div>`:''}</div>`:''}
     ${isC&&pending.length>0?`<p style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Propostas recebidas (${pending.length})</p>
     ${pending.map(p=>`<div class="prop-card">
@@ -764,7 +778,6 @@ function serviceHTML(){
 function attachService(){
   const svc=SVCS.find(s=>s.id===SCREEN_PARAM);
   if(!svc)return;
-  setTimeout(()=>initMap('svc-map',svc.lat||(-22.7406),svc.lng||(-43.7075),150),100);
   if(svc.status==='PENDING'&&USER.role==='client')setTimeout(startRadar,200);
 }
 function showPropForm(svcId){$('prop-form').style.display='block';$('prop-open-btn').style.display='none';}
