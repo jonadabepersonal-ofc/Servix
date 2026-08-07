@@ -892,7 +892,6 @@ async function submitRating(svcId){
 // ══════════════════════════════════════════════════════
 // PAYMENT
 // ══════════════════════════════════════════════════════
-let PAY_METHOD='pix';
 function paymentHTML(){
   const svc=SVCS.find(s=>s.id===SCREEN_PARAM);if(!svc)return'';
   const total=svc.final_price||0,taxa=total*TAXA,net=total-taxa;
@@ -908,96 +907,57 @@ function paymentHTML(){
       <div style="display:flex;justify-content:space-between;padding:10px 0;border-top:1px solid var(--border)"><span style="font-weight:700;font-size:15px">Total</span><span style="font-weight:800;color:var(--green);font-size:24px">${fmtR(total)}</span></div>
       <p style="font-size:11px;color:var(--sub);text-align:right;margin-top:2px">Prestador recebe: ${fmtR(net)}</p>
     </div>
-    <p style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Forma de pagamento</p>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
-      <button onclick="setPayMethod('pix',this)" id="pay-pix" class="cat-btn sel" style="padding:14px 10px"><span style="font-size:26px">📱</span><span class="cat-label">PIX</span><span style="font-size:10px;color:var(--sub);font-family:inherit">Instantâneo · grátis</span></button>
-      <button onclick="setPayMethod('card',this)" id="pay-card" class="cat-btn" style="padding:14px 10px"><span style="font-size:26px">💳</span><span class="cat-label">Cartão</span><span style="font-size:10px;color:var(--sub);font-family:inherit">Crédito ou débito</span></button>
+    <div class="card" style="text-align:center;padding:24px 20px">
+      <img src="https://http2.mlstatic.com/frontend-assets/mp-logo/logo__small.png" alt="Mercado Pago" style="height:26px;margin-bottom:14px;opacity:.9"/>
+      <p style="color:var(--muted);font-size:12.5px;line-height:1.7;margin-bottom:4px">
+        Você será levado ao ambiente seguro do Mercado Pago para escolher PIX, cartão de crédito, débito ou boleto.
+      </p>
+      <p style="color:var(--sub);font-size:11px">Nenhum dado de pagamento passa pelo ServiX — tudo é processado direto pelo Mercado Pago.</p>
     </div>
-    <div id="pix-section">
-      <div style="background:rgba(255,208,70,.06);border:1px solid rgba(255,208,70,.2);border-radius:12px;padding:14px;margin-bottom:14px">
-        <p style="color:var(--yellow);font-weight:700;font-size:13px;margin-bottom:4px">⚠️ PIX de demonstração</p>
-        <p style="color:var(--muted);font-size:12px;line-height:1.7">Para pagamento real, integre o Mercado Pago. Precisa: CNPJ + conta PJ MP + Access Token + Public Key.</p>
-      </div>
-    </div>
-    <div id="pix-qr" style="display:none;text-align:center;margin-bottom:14px">
-      <div class="card">
-        <p style="font-weight:700;font-size:14px;margin-bottom:14px">Escaneie o QR Code PIX</p>
-        <div style="width:160px;height:160px;background:var(--surface);border-radius:12px;border:2px solid var(--border);margin:0 auto 14px;display:flex;align-items:center;justify-content:center">
-          <div id="qr-pattern"></div>
-        </div>
-        <div style="background:var(--surface);border-radius:10px;padding:10px 14px;margin-bottom:12px"><p style="font-size:10px;color:var(--muted);font-family:monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">00020126580014br.gov.bcb.pix0136${svc.id.slice(0,10)}...</p></div>
-        <div style="display:flex;align-items:center;justify-content:center;gap:8px"><div style="width:8px;height:8px;border-radius:50%;background:var(--yellow);animation:pulse 1s ease infinite"></div><p style="color:var(--muted);font-size:12px">Aguardando confirmação...</p></div>
-      </div>
-    </div>
-    <div id="card-section" style="display:none">
-      <div class="card">
-        <p style="font-weight:700;font-size:14px;margin-bottom:12px">Dados do cartão</p>
-        <div class="field"><label>Número</label><input id="pay-cn" class="inp" placeholder="0000 0000 0000 0000"/></div>
-        <div class="field"><label>Nome no cartão</label><input id="pay-name" class="inp" placeholder="JOAO DA SILVA"/></div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-          <div class="field"><label>Validade</label><input id="pay-exp" class="inp" placeholder="MM/AA"/></div>
-          <div class="field"><label>CVV</label><input id="pay-cvv" class="inp" placeholder="123"/></div>
-        </div>
-      </div>
+    <div id="pay-err" style="display:none;background:rgba(255,71,87,.08);border:1px solid rgba(255,71,87,.3);border-radius:12px;padding:14px;margin-bottom:14px">
+      <p style="color:var(--red);font-size:12.5px;line-height:1.6"></p>
     </div>
     <div style="background:var(--surface);border-radius:12px;padding:14px;border:1px solid var(--border)">
-      <p style="color:var(--muted);font-size:11px;text-align:center;line-height:1.7">🔒 Pagamento seguro. O valor é retido e liberado ao prestador só após você confirmar a conclusão do serviço.</p>
+      <p style="color:var(--muted);font-size:11px;text-align:center;line-height:1.7">🔒 Pagamento seguro processado pelo Mercado Pago. O valor é retido e liberado ao prestador só após você confirmar a conclusão do serviço.</p>
     </div>
   </div>
   <div style="padding:12px 16px 16px;border-top:1px solid var(--border);background:var(--dark);flex-shrink:0">
-    <button id="pay-btn" onclick="doPay('${svc.id}')" class="btn primary full">📱 Gerar QR Code PIX</button>
+    <button id="pay-btn" onclick="doPay('${svc.id}')" class="btn primary full">💳 Pagar ${fmtR(total)} com Mercado Pago</button>
   </div>
 </div>`;}
-function attachPayment(){PAY_METHOD='pix';generateQRPattern();}
-function generateQRPattern(){
-  const qr=$('qr-pattern');if(!qr)return;
-  let svg='<svg width="140" height="140" viewBox="0 0 140 140">';
-  for(let i=0;i<196;i++){const x=(i%14)*10,y=Math.floor(i/14)*10;const edge=(x<20&&y<20)||(x>100&&y<20)||(x<20&&y>100);svg+=`<rect x="${x}" y="${y}" width="9" height="9" rx="1" fill="${edge||Math.random()>.42?'var(--text)':'transparent'}"/>`;}
-  svg+='</svg>';qr.innerHTML=svg;
-}
-function setPayMethod(m,btn){
-  PAY_METHOD=m;
-  $('pay-pix')?.classList.toggle('sel',m==='pix');
-  $('pay-card')?.classList.toggle('sel',m==='card');
-  $('pix-section').style.display=m==='pix'?'block':'none';
-  $('card-section').style.display=m==='card'?'block':'none';
-  $('pix-qr').style.display='none';
-  $('pay-btn').textContent=m==='pix'?'📱 Gerar QR Code PIX':'💳 Pagar com cartão';
-}
-let payStep=0;
+function attachPayment(){}
 async function doPay(svcId){
   const btn=$('pay-btn');
-  if(PAY_METHOD==='pix'&&payStep===0){
-    btn.disabled=true;btn.innerHTML='<div class="spin"></div>';
-    await sleep(900);btn.disabled=false;
-    $('pix-section').style.display='none';$('pix-qr').style.display='block';
-    btn.textContent='✅ Simular confirmação PIX';payStep=1;return;
-  }
-  if(PAY_METHOD==='card'){
-    const cn=$('pay-cn')?.value,nm=$('pay-name')?.value,exp=$('pay-exp')?.value,cvv=$('pay-cvv')?.value;
-    if(!cn||!nm||!exp||!cvv){toast('Preencha todos os dados do cartão');return;}
-  }
+  const errBox=$('pay-err');
+  if(errBox)errBox.style.display='none';
   btn.disabled=true;btn.innerHTML='<div class="spin"></div>';
-  const svc=SVCS.find(s=>s.id===svcId);const total=svc?.final_price||0;
-  await SB.from('transactions').insert([{id:genId(),service_id:svcId,gross_amount:total,platform_fee:total*TAXA,net_amount:total*(1-TAXA),method:PAY_METHOD,status:'CONFIRMED',created_at:new Date().toISOString()}]).catch(()=>{});
-  await SB.from('services').update({status:'IN_PROGRESS'}).eq('id',svcId).catch(()=>{});
-  SVCS=SVCS.map(s=>s.id===svcId?{...s,status:'IN_PROGRESS'}:s);
-  addNotif('💳','Pagamento confirmado!','O prestador foi notificado e iniciará em breve.');
-  // Show success
-  btn.disabled=false;btn.textContent='✅ Pago';
-  $('app').innerHTML=`<div class="screen" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:32px;background:var(--dark)">
-    <div style="width:100px;height:100px;background:rgba(0,212,106,.1);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:50px;box-shadow:0 0 60px rgba(0,212,106,.25)">✅</div>
-    <h2 style="font-weight:800;font-size:22px;font-family:'Space Grotesk',sans-serif;text-align:center">Pagamento confirmado!</h2>
-    <p style="color:var(--muted);text-align:center;line-height:1.6">O prestador foi notificado e iniciará o serviço em breve.</p>
-    <div class="card" style="width:100%">
-      <div style="display:flex;justify-content:space-between;margin-bottom:8px"><span style="color:var(--muted);font-size:13px">Total pago</span><span style="color:var(--green);font-weight:700">${fmtR(total)}</span></div>
-      <div style="display:flex;justify-content:space-between;margin-bottom:8px"><span style="color:var(--muted);font-size:13px">Taxa ServiX</span><span style="color:var(--muted);font-size:13px">− ${fmtR(total*TAXA)}</span></div>
-      <div style="display:flex;justify-content:space-between"><span style="color:var(--muted);font-size:13px">Prestador recebe</span><span style="font-weight:700">${fmtR(total*(1-TAXA))}</span></div>
-    </div>
-    <button onclick="render('service','${svcId}')" class="btn primary full">Ver serviço</button>
-  </div>`;
-  $('nav').style.display='none';$('wa-btn').style.display='flex';
-  toast('💳 Pagamento realizado!');
+  try{
+    const res=await fetch(`${SUPA_URL}/functions/v1/create-payment`,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({service_id:svcId})
+    });
+    const data=await res.json();
+    if(!res.ok||!data.init_point)throw new Error(data.error||'Erro ao gerar pagamento');
+    // Leva o usuário para o checkout seguro do Mercado Pago
+    window.location.href=data.init_point;
+  }catch(e){
+    btn.disabled=false;btn.textContent='💳 Tentar novamente';
+    if(errBox){errBox.style.display='block';errBox.querySelector('p').textContent='Não foi possível iniciar o pagamento. '+(e.message||'Tente novamente em instantes.');}
+    toast('Erro ao iniciar pagamento');
+  }
+}
+
+// Retorno do checkout do Mercado Pago (?paid=1|0|pending&sid=...)
+function checkPaymentReturn(){
+  const p=new URLSearchParams(window.location.search);
+  const paid=p.get('paid'),sid=p.get('sid');
+  if(!paid||!sid)return;
+  history.replaceState({},'',window.location.pathname+window.location.hash);
+  if(paid==='1')toast('✅ Pagamento aprovado! Confirmando com o Mercado Pago...');
+  else if(paid==='pending')toast('⏳ Pagamento em análise pelo Mercado Pago');
+  else toast('Pagamento não concluído');
+  setTimeout(()=>{ if(USER)loadServices().then(()=>render('service',sid)); },1200);
 }
 
 // ══════════════════════════════════════════════════════
@@ -1208,7 +1168,7 @@ if(new URLSearchParams(location.search).get('admin')==='1'){
   document.getElementById('app').innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100%;flex-direction:column;gap:12px"><div class="spin"></div><p style="color:var(--muted);font-size:13px">Abrindo admin...</p></div>';
   setTimeout(renderAdmin,200);
 }else if(USER){
-  loadServices().then(()=>{setupRealtime();render('home');});
+  loadServices().then(()=>{setupRealtime();render('home');checkPaymentReturn();});
 }else{
   render('login');
 }
